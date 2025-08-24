@@ -38,20 +38,37 @@ except Exception:
     pass
 # -----------------------------------------------------------------
 
-# 1) Éviter que cv2 impose son dossier de plugins Qt
-os.environ.pop("QT_PLUGIN_PATH", None)
-os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
-# 2) Forcer la plateforme Qt (mets "wayland" si tu es 100% en Wayland)
-os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
-# 3) Pointer explicitement vers les plugins PySide6 (optionnel)
-try:
-    import PySide6, pathlib
-    pyside_dir = pathlib.Path(PySide6.__file__).parent
-    qt_plugins = pyside_dir / "Qt" / "plugins"
-    if qt_plugins.exists():
-        os.environ["QT_PLUGIN_PATH"] = str(qt_plugins)
-except Exception:
-    pass
+# --- Paramétrage Qt par OS (ne pas forcer xcb sur macOS !) ---
+import sys, os
+
+if sys.platform.startswith("linux"):
+    # Linux : nettoyer d'éventuelles variables héritées
+    os.environ.pop("QT_PLUGIN_PATH", None)
+    os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
+    # Si tu es certain d'être en X11, tu peux décommenter :
+    # os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
+
+    # (Optionnel) Aider Qt à trouver ses plugins quand tu lances en source
+    try:
+        import PySide6, pathlib
+        pyside_dir = pathlib.Path(PySide6.__file__).parent
+        qt_plugins = pyside_dir / "Qt" / "plugins"
+        if qt_plugins.exists():
+            os.environ["QT_PLUGIN_PATH"] = str(qt_plugins)
+    except Exception:
+        pass
+
+elif sys.platform == "darwin":
+    # macOS : NE RIEN FORCER — Qt choisit "cocoa"
+    os.environ.pop("QT_QPA_PLATFORM", None)
+    os.environ.pop("QT_PLUGIN_PATH", None)
+    os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
+    # Pas d'injection de QT_PLUGIN_PATH ici : PyInstaller embarque qcocoa lui-même
+
+else:
+    # Windows / autres : ne rien forcer
+    os.environ.pop("QT_QPA_PLATFORM", None)
+
 
 import re
 import time
