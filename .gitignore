@@ -1,0 +1,6 @@
+__pycache__/\ndist/\nbuild/\n*.spec\n.venv/\n
+
+/people
+/output_photos
+/.DS_Store
+/input_photos
