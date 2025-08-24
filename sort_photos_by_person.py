@@ -19,6 +19,25 @@ Dépendances (requirements) :
 from __future__ import annotations
 
 import os, sys
+
+# --- OFFLINE MODE: embarquer les modèles InsightFace dans l'app ---
+from pathlib import Path
+
+def _bundled_insightface_home() -> Path:
+    # Quand l'app est packagée, PyInstaller expose un dossier temporaire sys._MEIPASS
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+    # On embarque un dossier "insightface_home" avec la structure attendue: insightface_home/models/buffalo_l/...
+    return base / "insightface_home"
+
+# Priorité aux modèles embarqués si on est packagé
+try:
+    INSIGHT_HOME = _bundled_insightface_home()
+    if INSIGHT_HOME.exists():
+        os.environ["INSIGHTFACE_HOME"] = str(INSIGHT_HOME)
+except Exception:
+    pass
+# -----------------------------------------------------------------
+
 # 1) Éviter que cv2 impose son dossier de plugins Qt
 os.environ.pop("QT_PLUGIN_PATH", None)
 os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)

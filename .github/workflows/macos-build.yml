@@ -1,4 +1,4 @@
-name: Build macOS app
+name: Build macOS app (offline)
 
 on:
   push:
@@ -8,18 +8,14 @@ on:
 jobs:
   build-macos:
     runs-on: macos-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      # HEIC pour pillow-heif
-      - name: Install Homebrew deps
+      - name: Install Homebrew deps (HEIC)
         run: |
           brew update
           brew install libheif
@@ -29,14 +25,17 @@ jobs:
           python -m pip install --upgrade pip wheel setuptools
           pip install -r requirements.txt
 
-      # Build via .spec (recommandé), sinon fallback simple
-      - name: Build with PyInstaller
+      # === Option B : télécharger les modèles pendant le build
+      # (supprime ce bloc si tu commits déjà insightface_home/ dans le repo)
+      - name: Download InsightFace models (buffalo_l)
         run: |
-          if [ -f FaceSorter.spec ]; then
-            pyinstaller FaceSorter.spec
-          else
-            pyinstaller --name "FaceSorter" --windowed --onefile sort_photos_by_person.py
-          fi
+          mkdir -p insightface_home/models/buffalo_l
+          curl -L -o buffalo_l.zip "https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip"
+          unzip -o buffalo_l.zip -d insightface_home/models/
+
+      - name: Build with PyInstaller (.spec)
+        run: |
+          pyinstaller FaceSorter.spec
 
       - name: Zip app
         run: |
