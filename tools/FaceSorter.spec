@@ -10,18 +10,19 @@ from PyInstaller.utils.hooks import (
     collect_submodules,
 )
 
-ROOT = Path(__file__).resolve().parent.parent  # repo root
+# When PyInstaller runs a spec, __file__ is not defined -> use CWD
+ROOT = Path.cwd()
 SRC = ROOT / "src"
 TOOLS = ROOT / "tools"
 
-# Rendre le package importable dans ce .spec (pour lire __version__)
+# Make package importable to read version
 sys.path.insert(0, str(SRC))
 try:
     from facesorter import __version__ as FS_VERSION
 except Exception:
     FS_VERSION = "0.0.0"
 
-# --- PySide6: datas (traductions) + plugins Qt ---
+# --- PySide6: translations + plugins Qt ---
 pyside_datas = collect_data_files(
     "PySide6",
     includes=[
@@ -32,23 +33,32 @@ pyside_datas = collect_data_files(
         "Qt/plugins/styles/*",
     ],
 )
+# Extra safety: collect from submodule PySide6.Qt (sometimes needed on CI)
+pyside_plugins = collect_data_files(
+    "PySide6.Qt",
+    includes=[
+        "plugins/platforms/*",
+        "plugins/imageformats/*",
+        "plugins/iconengines/*",
+        "plugins/styles/*",
+    ],
+)
 
-# --- onnxruntime (CPU ou silicon): libs dynamiques ---
-# Le package s'appelle 'onnxruntime' (même pour onnxruntime-silicon), l'import python aussi.
+# --- onnxruntime (CPU or silicon): dynamic libs ---
 onnx_bins = []
 try:
     onnx_bins = collect_dynamic_libs("onnxruntime")
 except Exception:
     onnx_bins = []
 
-# --- pillow-heif : données éventuelles ---
+# --- pillow-heif: optional data ---
 pillow_heif_datas = []
 try:
     pillow_heif_datas = collect_data_files("pillow_heif")
 except Exception:
     pillow_heif_datas = []
 
-# --- libheif via Homebrew (optionnel) ---
+# --- libheif via Homebrew (optional) ---
 brew_lib_candidates = ["/usr/local/lib", "/opt/homebrew/lib"]
 libheif_bins = []
 for libdir in brew_lib_candidates:
@@ -57,7 +67,7 @@ for libdir in brew_lib_candidates:
             if fn.startswith("libheif") and fn.endswith(".dylib"):
                 libheif_bins.append((os.path.join(libdir, fn), "."))
 
-# --- libomp.dylib (Intel) optionnel ---
+# --- libomp.dylib (Intel, optional) ---
 libomp_bins = []
 for libdir in ["/usr/local/lib", "/usr/local/opt/libomp/lib", "/opt/homebrew/opt/libomp/lib"]:
     if os.path.isdir(libdir):
@@ -65,30 +75,29 @@ for libdir in ["/usr/local/lib", "/usr/local/opt/libomp/lib", "/opt/homebrew/opt
         if os.path.exists(cand):
             libomp_bins.append((cand, "."))
 
-# --- Modèles InsightFace embarqués (mode hors-ligne) ---
+# --- InsightFace offline models ---
 extra_datas = []
 if (ROOT / "insightface_home").is_dir():
-    # copie le dossier tel quel dans l'app
     extra_datas.append((str(ROOT / "insightface_home"), "insightface_home"))
 
-# --- Hidden imports InsightFace/ONNX & libs scientifiques (dyn load) ---
+# --- Hidden imports InsightFace / ONNX / scientific stack ---
 hiddenimports = set()
-for mod in ("insightface", "onnx", "onnxruntime", "skimage", "scipy"):
+for mod in ("insightface", "onnx", "onnxruntime", "skimage", "scipy", "cv2"):
     try:
         hiddenimports.update(collect_submodules(mod))
     except Exception:
         pass
 
-# --- Icône (facultatif) ---
+# --- Icon (optional) ---
 ICON_PATH = TOOLS / "icon.icns"
 ICON = str(ICON_PATH) if ICON_PATH.exists() else None
 
 a = Analysis(
-    # Pointe maintenant vers l'entrée GUI de ton package
+    # Entry point: GUI main window
     [str(SRC / "facesorter" / "gui" / "main_window.py")],
-    pathex=[str(SRC)],        # <--- important pour importer le package facesorter
+    pathex=[str(SRC)],        # important for imports
     binaries=onnx_bins + libheif_bins + libomp_bins,
-    datas=pyside_datas + pillow_heif_datas + extra_datas,
+    datas=pyside_datas + pyside_plugins + pillow_heif_datas + extra_datas,
     hiddenimports=list(hiddenimports),
     noarchive=False,
 )
@@ -118,7 +127,7 @@ app = BUNDLE(
         "LSApplicationCategoryType": "public.app-category.photography",
         "NSPhotoLibraryUsageDescription": "FaceSorter needs access to your photos to organize them by person.",
         "NSDocumentsFolderUsageDescription": "FaceSorter organizes photos in your folders.",
-        # "NSAppSleepDisabled": True,  # Décommente si tu veux éviter l'App Nap
+        # "NSAppSleepDisabled": True,  # uncomment if you want to disable App Nap
     },
     bundle_identifier="org.hdj-advisor.facesorter",
 )
