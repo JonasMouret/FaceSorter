@@ -17,12 +17,14 @@ dependencies = [
   "opencv-python",
   "insightface>=0.7.3",
   "onnxruntime; platform_system != 'Darwin'",
-  "onnxruntime-silicon; platform_system == 'Darwin'",
   "PySide6",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "mypy", "pre-commit"]
+
+ort_cpu = ["onnxruntime"]
+ort_macos_arm = ["onnxruntime-silicon"]
 
 [project.scripts]
 facesorter = "facesorter.cli:main"
