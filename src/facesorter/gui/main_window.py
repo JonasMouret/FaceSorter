@@ -33,7 +33,18 @@ from PySide6.QtWidgets import (
 
 from facesorter.config import SorterConfig
 from facesorter.io.images import list_images, ensure_dir, safe_dirname
-from facesorter.worker.sorter_worker import SortWorker
+
+
+# --- Helpers chemins (macOS-friendly) -------------------------------------------------
+def _to_local_path(s: str) -> Path:
+    """Convertit 'file:///…' en chemin local, gère ~, et renvoie un Path résolu."""
+    from urllib.parse import urlparse, unquote
+    if not s:
+        return Path.cwd().resolve()
+    if s.startswith("file://"):
+        p = urlparse(s)
+        s = unquote(p.path)
+    return Path(s).expanduser().resolve()
 
 
 # =========================
@@ -102,15 +113,13 @@ class MainWindow(QMainWindow):
 
         self.people_list = PeopleListWidget()
         self.people_count_label = QLabel("0 personne")
-        self.people_move_on_drop_chk = QCheckBox(
-            "Déplacer lors du dépôt (sinon copie)")
+        self.people_move_on_drop_chk = QCheckBox("Déplacer lors du dépôt (sinon copie)")
 
         # zone de création
         create_box = QGroupBox("Créer des dossiers people")
         ch = QHBoxLayout(create_box)
         self.names_edit = QLineEdit()
-        self.names_edit.setPlaceholderText(
-            "Noms séparés par des virgules (ex: Jonas, Alice)")
+        self.names_edit.setPlaceholderText("Noms séparés par des virgules (ex: Jonas, Alice)")
         self.create_people_btn = QPushButton("Créer")
         ch.addWidget(self.names_edit, 1)
         ch.addWidget(self.create_people_btn)
@@ -185,8 +194,7 @@ class MainWindow(QMainWindow):
         self.poll_spin.setRange(1, 60)
         self.ctx_combo = QComboBox()
         self.ctx_combo.addItems(["CPU (ctx=-1)", "GPU #0 (ctx=0)"])
-        self.dup_faces_chk = QCheckBox(
-            "Dupliquer la photo pour chaque personne reconnue")
+        self.dup_faces_chk = QCheckBox("Dupliquer la photo pour chaque personne reconnue")
         self.move_chk = QCheckBox("Déplacer (au lieu de copier)")
         g.addWidget(QLabel("Seuil de match (cosine) :"), 0, 0)
         g.addWidget(self.threshold_spin, 0, 1)
@@ -206,8 +214,7 @@ class MainWindow(QMainWindow):
 
         # Controls
         h_ctrl = QHBoxLayout()
-        self.build_gallery_btn = QPushButton(
-            "(Re)construire la galerie maintenant")
+        self.build_gallery_btn = QPushButton("(Re)construire la galerie maintenant")
         self.open_people_btn = QPushButton("Ouvrir people/")
         self.open_input_btn = QPushButton("Ouvrir input/")
         self.open_output_btn = QPushButton("Ouvrir output/")
@@ -245,68 +252,52 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(splitter)
 
         # Signals
-        self.b_people.clicked.connect(
-            lambda: self.select_dir(self.people_edit))
+        self.b_people.clicked.connect(lambda: self.select_dir(self.people_edit))
         self.b_input.clicked.connect(lambda: self.select_dir(self.input_edit))
-        self.b_output.clicked.connect(
-            lambda: self.select_dir(self.output_edit))
+        self.b_output.clicked.connect(lambda: self.select_dir(self.output_edit))
         self.create_people_btn.clicked.connect(self.create_people_folders)
         self.refresh_people_btn.clicked.connect(self.refresh_people_list)
         self.add_photos_btn.clicked.connect(self.add_photos_to_selected)
         self.delete_person_btn.clicked.connect(self.delete_selected_person)
         self.build_gallery_btn.clicked.connect(self.build_gallery_now)
-        self.open_people_btn.clicked.connect(
-            lambda: self.open_dir(self.people_edit.text()))
-        self.open_input_btn.clicked.connect(
-            lambda: self.open_dir(self.input_edit.text()))
-        self.open_output_btn.clicked.connect(
-            lambda: self.open_dir(self.output_edit.text()))
+        self.open_people_btn.clicked.connect(lambda: self.open_dir(self.people_edit.text()))
+        self.open_input_btn.clicked.connect(lambda: self.open_dir(self.input_edit.text()))
+        self.open_output_btn.clicked.connect(lambda: self.open_dir(self.output_edit.text()))
         self.start_btn.clicked.connect(self.start_worker)
         self.stop_btn.clicked.connect(self.stop_worker)
 
         # Drag & drop depuis la liste
         self.people_list.dropped_files.connect(self.handle_people_drop)
-        self.people_list.currentItemChanged.connect(
-            self.on_person_selection_changed)
+        self.people_list.currentItemChanged.connect(self.on_person_selection_changed)
         self.thumb_list.itemDoubleClicked.connect(self.open_thumbnail_item)
 
         # Defaults & settings
         self.load_settings()
-        self.worker: Optional[SortWorker] = None
+        self.worker: Optional['SortWorker'] = None  # lazy import, annotation ok grâce à __future__
 
         # Peupler la liste au démarrage
         self.refresh_people_list()
 
     # === Helpers généraux ===
     def load_settings(self):
-        self.people_edit.setText(self.settings.value(
-            "people_dir", str(Path.cwd() / "people")))
-        self.input_edit.setText(self.settings.value(
-            "input_dir", str(Path.cwd() / "input_photos")))
-        self.output_edit.setText(self.settings.value(
-            "output_dir", str(Path.cwd() / "output_photos")))
-        self.threshold_spin.setValue(
-            float(self.settings.value("match_threshold", 0.45)))
-        self.ambig_spin.setValue(
-            float(self.settings.value("ambiguous_margin", 0.05)))
-        self.minface_spin.setValue(
-            int(self.settings.value("min_face_size", 24)))
-        self.groupwin_spin.setValue(
-            int(self.settings.value("group_window_sec", 4)))
+        self.people_edit.setText(str(_to_local_path(self.settings.value("people_dir", str(Path.cwd() / "people")))))
+        self.input_edit.setText(str(_to_local_path(self.settings.value("input_dir", str(Path.cwd() / "input_photos")))))
+        self.output_edit.setText(str(_to_local_path(self.settings.value("output_dir", str(Path.cwd() / "output_photos")))))
+        self.threshold_spin.setValue(float(self.settings.value("match_threshold", 0.45)))
+        self.ambig_spin.setValue(float(self.settings.value("ambiguous_margin", 0.05)))
+        self.minface_spin.setValue(int(self.settings.value("min_face_size", 24)))
+        self.groupwin_spin.setValue(int(self.settings.value("group_window_sec", 4)))
         self.poll_spin.setValue(int(self.settings.value("poll_seconds", 5)))
         ctx = int(self.settings.value("ctx_id", -1))
         self.ctx_combo.setCurrentIndex(0 if ctx == -1 else 1)
-        self.dup_faces_chk.setChecked(self.settings.value(
-            "duplicate_multi_faces", "false") == "true")
-        self.move_chk.setChecked(self.settings.value(
-            "move_instead_copy", "true") == "true")
-        self.people_move_on_drop_chk.setChecked(
-            self.settings.value("move_on_drop", "false") == "true")
+        self.dup_faces_chk.setChecked(self.settings.value("duplicate_multi_faces", "false") == "true")
+        self.move_chk.setChecked(self.settings.value("move_instead_copy", "true") == "true")
+        self.people_move_on_drop_chk.setChecked(self.settings.value("move_on_drop", "false") == "true")
 
     def save_settings(self):
-        self.settings.setValue("people_dir", self.people_edit.text())
-        self.settings.setValue("input_dir", self.input_edit.text())
-        self.settings.setValue("output_dir", self.output_edit.text())
+        self.settings.setValue("people_dir", str(_to_local_path(self.people_edit.text())))
+        self.settings.setValue("input_dir", str(_to_local_path(self.input_edit.text())))
+        self.settings.setValue("output_dir", str(_to_local_path(self.output_edit.text())))
         self.settings.setValue("match_threshold", self.threshold_spin.value())
         self.settings.setValue("ambiguous_margin", self.ambig_spin.value())
         self.settings.setValue("min_face_size", self.minface_spin.value())
@@ -314,29 +305,20 @@ class MainWindow(QMainWindow):
         self.settings.setValue("poll_seconds", self.poll_spin.value())
         ctx_id = -1 if self.ctx_combo.currentIndex() == 0 else 0
         self.settings.setValue("ctx_id", ctx_id)
-        self.settings.setValue(
-            "duplicate_multi_faces", "true" if self.dup_faces_chk.isChecked() else "false")
-        self.settings.setValue(
-            "move_instead_copy", "true" if self.move_chk.isChecked() else "false")
-        self.settings.setValue(
-            "move_on_drop", "true" if self.people_move_on_drop_chk.isChecked() else "false")
-
+        self.settings.setValue("duplicate_multi_faces", "true" if self.dup_faces_chk.isChecked() else "false")
+        self.settings.setValue("move_instead_copy", "true" if self.move_chk.isChecked() else "false")
+        self.settings.setValue("move_on_drop", "true" if self.people_move_on_drop_chk.isChecked() else "false")
 
     def select_dir(self, edit: QLineEdit):
-        d = QFileDialog.getExistingDirectory(
-            self, "Choisir un dossier", edit.text() or str(Path.cwd()))
+        d = QFileDialog.getExistingDirectory(self, "Choisir un dossier", edit.text() or str(Path.cwd()))
         if d:
-            from ..io.images import list_images
-            from pathlib import Path
-
-            p = Path(d).expanduser().resolve()
+            p = _to_local_path(d)
             edit.setText(str(p))
             self.save_settings()
 
             # 🔎 Log immédiat du nombre d’images détectées
             n = len(list_images(p))
-            label = "people" if edit is self.people_edit else (
-                "input" if edit is self.input_edit else "output")
+            label = "people" if edit is self.people_edit else ("input" if edit is self.input_edit else "output")
             self.append_log(f"[{label}] {p} — {n} image(s) détectée(s)")
 
             if edit is self.people_edit:
@@ -345,9 +327,9 @@ class MainWindow(QMainWindow):
     def open_dir(self, path_str: str):
         if not path_str:
             return
-        p = Path(path_str)
+        p = _to_local_path(path_str)
         ensure_dir(p)
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(p.resolve())))
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(p)))
 
     def append_log(self, text: str):
         self.log.appendPlainText(text)
@@ -355,7 +337,7 @@ class MainWindow(QMainWindow):
 
     # === Panneau People ===
     def refresh_people_list(self):
-        people_dir = Path(self.people_edit.text())
+        people_dir = _to_local_path(self.people_edit.text())
         ensure_dir(people_dir)
         self.people_list.clear()
         count_people = 0
@@ -375,10 +357,9 @@ class MainWindow(QMainWindow):
     def create_people_folders(self):
         names_line = self.names_edit.text().strip()
         if not names_line:
-            QMessageBox.information(
-                self, "Info", "Entrez des noms séparés par des virgules.")
+            QMessageBox.information(self, "Info", "Entrez des noms séparés par des virgules.")
             return
-        people_dir = Path(self.people_edit.text())
+        people_dir = _to_local_path(self.people_edit.text())
         ensure_dir(people_dir)
         created = []
         for raw in names_line.split(","):
@@ -398,15 +379,13 @@ class MainWindow(QMainWindow):
     def delete_selected_person(self):
         item = self.people_list.currentItem()
         if not item:
-            QMessageBox.information(
-                self, "Info", "Sélectionne une personne à supprimer.")
+            QMessageBox.information(self, "Info", "Sélectionne une personne à supprimer.")
             return
         name = item.data(Qt.UserRole) or item.text().split("—", 1)[0].strip()
-        people_dir = Path(self.people_edit.text())
+        people_dir = _to_local_path(self.people_edit.text())
         target = people_dir / name
         if not target.exists() or not target.is_dir():
-            QMessageBox.warning(self, "Attention",
-                                f"Le dossier {target} n'existe pas.")
+            QMessageBox.warning(self, "Attention", f"Le dossier {target} n'existe pas.")
             return
         # confirmation
         ret = QMessageBox.question(
@@ -420,7 +399,6 @@ class MainWindow(QMainWindow):
             return
         try:
             import shutil
-
             shutil.rmtree(target)
             self.append_log(f"[people] Dossier supprimé : {target}")
         except Exception as e:
@@ -437,15 +415,7 @@ class MainWindow(QMainWindow):
             if p.is_dir():
                 imgs.extend(list_images(p))
             elif p.is_file() and p.suffix.lower() in {
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".webp",
-                ".bmp",
-                ".tif",
-                ".tiff",
-                ".heic",
-                ".heif",
+                ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif",
             }:
                 imgs.append(p)
         return imgs
@@ -454,14 +424,13 @@ class MainWindow(QMainWindow):
         """Drag & drop: copie/déplace des fichiers/dossiers dans people/<person_name>/"""
         import shutil
 
-        people_dir = Path(self.people_edit.text())
+        people_dir = _to_local_path(self.people_edit.text())
         target_dir = people_dir / safe_dirname(person_name)
         ensure_dir(target_dir)
 
         imgs = self._gather_image_paths(paths)
         if not imgs:
-            QMessageBox.information(
-                self, "Info", "Aucune image reconnue dans le dépôt.")
+            QMessageBox.information(self, "Info", "Aucune image reconnue dans le dépôt.")
             return
 
         move = self.people_move_on_drop_chk.isChecked()
@@ -488,8 +457,7 @@ class MainWindow(QMainWindow):
     def add_photos_to_selected(self):
         item = self.people_list.currentItem()
         if not item:
-            QMessageBox.information(
-                self, "Info", "Sélectionne une personne dans la liste.")
+            QMessageBox.information(self, "Info", "Sélectionne une personne dans la liste.")
             return
         person = item.data(Qt.UserRole) or item.text().split("—", 1)[0].strip()
         files, _ = QFileDialog.getOpenFileNames(
@@ -507,9 +475,8 @@ class MainWindow(QMainWindow):
         self.thumb_list.clear()
         if not current:
             return
-        name = current.data(Qt.UserRole) or current.text().split(
-            "—", 1)[0].strip()
-        people_dir = Path(self.people_edit.text())
+        name = current.data(Qt.UserRole) or current.text().split("—", 1)[0].strip()
+        people_dir = _to_local_path(self.people_edit.text())
         folder = people_dir / name
         if not folder.exists():
             return
@@ -517,8 +484,7 @@ class MainWindow(QMainWindow):
         # option: limiter pour éviter les freezes si énorme dossier
         max_show = 500
         if len(images) > max_show:
-            self.append_log(
-                f"[thumbs] {len(images)} images, affichage des {max_show} premières…")
+            self.append_log(f"[thumbs] {len(images)} images, affichage des {max_show} premières…")
         for p in images[:max_show]:
             icon = self._make_icon_for_path(p, 128)
             item = QListWidgetItem(icon, p.name)
@@ -543,27 +509,26 @@ class MainWindow(QMainWindow):
     # --- Build gallery on demand ---
     def build_gallery_now(self):
         if self.worker and self.worker.isRunning():
-            QMessageBox.information(
-                self, "Info", "Arrête d'abord le traitement en cours pour reconstruire manuellement.")
+            QMessageBox.information(self, "Info", "Arrête d'abord le traitement en cours pour reconstruire manuellement.")
             return
         cfg = self.collect_config()
         try:
             self.append_log("[Galerie] Chargement du modèle…")
-            # Utilise un SortWorker éphémère pour réutiliser le même core/service
+            # Lazy import pour éviter l’import d’ONNX/InsightFace au lancement
+            from facesorter.worker.sorter_worker import SortWorker  # noqa: WPS433
             worker = SortWorker(cfg)
             worker.core.load_service()
             n = worker.core.rebuild_gallery()
             self.append_log(f"[Galerie] OK ({n} personne(s)).")
         except Exception as e:
-            QMessageBox.critical(
-                self, "Erreur", f"Reconstruction échouée : {e}")
+            QMessageBox.critical(self, "Erreur", f"Reconstruction échouée : {e}")
 
     # --- Config ---
     def collect_config(self) -> SorterConfig:
         cfg = SorterConfig(
-            people_dir=Path(self.people_edit.text()),
-            input_dir=Path(self.input_edit.text()),
-            output_dir=Path(self.output_edit.text()),
+            people_dir=_to_local_path(self.people_edit.text()),
+            input_dir=_to_local_path(self.input_edit.text()),
+            output_dir=_to_local_path(self.output_edit.text()),
             min_face_size=self.minface_spin.value(),
             topk=5,
             embed_norm=True,
@@ -582,6 +547,10 @@ class MainWindow(QMainWindow):
         ensure_dir(cfg.output_dir)
         ensure_dir(cfg.output_dir / cfg.unknown_dirname)
         ensure_dir(cfg.output_dir / cfg.noface_dirname)
+        # log pratique
+        self.append_log(f"[CFG] people={cfg.people_dir}")
+        self.append_log(f"[CFG] input={cfg.input_dir}")
+        self.append_log(f"[CFG] output={cfg.output_dir}")
         self.save_settings()
         return cfg
 
@@ -590,15 +559,14 @@ class MainWindow(QMainWindow):
         if self.worker and self.worker.isRunning():
             return
         cfg = self.collect_config()
+        from facesorter.worker.sorter_worker import SortWorker  # lazy import
         self.worker = SortWorker(cfg)
         # Connexions aux signaux (noms depuis worker.sorter_worker)
         self.worker.log_sig.connect(self.append_log)
         self.worker.status.connect(lambda s: self.statusBar().showMessage(s))
-        self.worker.gallery_built.connect(lambda n: self.append_log(
-            f"[Galerie] {n} personne(s) dans la galerie."))
+        self.worker.gallery_built.connect(lambda n: self.append_log(f"[Galerie] {n} personne(s) dans la galerie."))
         # Barre de progression
-        self.worker.progress_set_max.connect(
-            lambda n: self.progress.setMaximum(max(0, n)))
+        self.worker.progress_set_max.connect(lambda n: self.progress.setMaximum(max(0, n)))
         self.worker.progress_set_value.connect(self.progress.setValue)
         self.worker.progress_set_text.connect(self.progress.setFormat)
 
