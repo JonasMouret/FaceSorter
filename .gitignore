@@ -32,7 +32,6 @@ people/
 insightface_home/
 
 # --- Packaging ---
-*.spec
 *.bak
 *.tmp
 
