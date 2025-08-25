@@ -31,9 +31,9 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
 )
 
-from ..config import SorterConfig
-from ..io.images import list_images, ensure_dir, safe_dirname
-from ..worker.sorter_worker import SortWorker
+from facesorter.config import SorterConfig
+from facesorter.io.images import list_images, ensure_dir, safe_dirname
+from facesorter.worker.sorter_worker import SortWorker
 
 
 # =========================

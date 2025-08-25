@@ -17,6 +17,7 @@ dependencies = [
   "opencv-python",
   "insightface>=0.7.3",
   "onnxruntime; platform_system != 'Darwin'",
+  "onnxruntime-silicon; platform_system == 'Darwin'",
   "PySide6",
 ]
 
@@ -29,6 +30,11 @@ facesorter-gui = "facesorter.gui.main_window:main"  # à créer: un petit wrappe
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["facesorter*"]
+
 
 [tool.ruff]
 line-length = 100
