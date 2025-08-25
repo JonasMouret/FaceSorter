@@ -1,0 +1,24 @@
+# .github/release.yml
+changelog:
+  categories:
+    - title: ✨ Added
+      labels:
+        - enhancement
+        - feature
+    - title: 🔄 Changed
+      labels:
+        - changed
+        - refactor
+    - title: 🐛 Fixed
+      labels:
+        - bug
+        - fix
+    - title: 🛡️ Security
+      labels:
+        - security
+    - title: 📖 Documentation
+      labels:
+        - docs
+    - title: 🧰 Other
+      labels:
+        - "*"

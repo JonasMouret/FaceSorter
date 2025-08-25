@@ -1,118 +1,165 @@
 # FaceSorter
 
-**FaceSorter** est une application graphique multiplateforme (**macOS, Windows, Linux**) permettant de **trier/déplacer automatiquement des photos par personne** à l’aide de [InsightFace](https://github.com/deepinsight/insightface).  
+**FaceSorter** is a cross-platform application (**macOS, Windows, Linux**) to **automatically sort and move photos by person** using [InsightFace](https://github.com/deepinsight/insightface).  
 
 ---
 
-## ✨ Fonctionnalités
+## ✨ Features
 
-- Interface graphique (Qt / PySide6)
-- Choix des dossiers `people/`, `input_photos/`, `output_photos/`
-- Lister, créer, supprimer des personnes (`people/<Nom>`)
-- Glisser-déposer des photos/dossiers directement sur une personne
-- Aperçu en vignettes des photos d’un dossier (double-clic = ouverture)
-- Paramétrage : seuils de similarité, taille visage min., fenêtre de rafale, duplication multi-visages…
-- Traitement continu (poll toutes les N secondes) avec barre de progression
-- Déplacement ou copie des photos triées vers `output_photos/<Nom>/`
-- Reconstruction automatique de la galerie quand `people/` change
-- **Mode hors-ligne** : les modèles InsightFace (`buffalo_l`) sont embarqués dans l’application
+- Modern graphical interface (Qt / PySide6)
+- Configure `people/`, `input_photos/`, `output_photos` directories
+- List, create, and delete people folders (`people/<Name>`)
+- Drag & drop photos or folders directly onto a person
+- Thumbnail preview of photos (double-click = open in viewer)
+- Configurable options: similarity threshold, min face size, burst grouping window, multi-face duplication…
+- Continuous background processing (polling every N seconds) with progress bar
+- Move or copy sorted photos into `output_photos/<Name>/`
+- Automatic gallery rebuild whenever `people/` changes
+- **Offline mode**: InsightFace models (`buffalo_l`) are bundled with the app
 
 ---
 
-## 📦 Dépendances
+## 📦 Requirements
 
 Python ≥ 3.10  
 
-Bibliothèques Python :
+Main Python dependencies (declared in [pyproject.toml](pyproject.toml)):
+
 - `PySide6`
 - `insightface`
-- `onnxruntime` (ou `onnxruntime-gpu` si GPU NVIDIA est disponible)
+- `onnxruntime` (or `onnxruntime-gpu` if you have an NVIDIA GPU)
 - `opencv-python`
 - `pillow`
 - `pillow-heif`
 - `numpy`
 
-Librairies natives :
-- **Linux** : `libheif` (`sudo apt install libheif1 libheif-dev`)
-- **macOS** : via Homebrew → `brew install libheif`
+Native libraries:
 
-👉 Toutes les dépendances Python sont listées dans [`requirements.txt`](requirements.txt).
+- **Linux**: `libheif` (`sudo apt install libheif1 libheif-dev`)
+- **macOS**: via Homebrew → `brew install libheif`
 
 ---
 
-## 🚀 Installation (mode développement)
+## 🚀 Development Installation
 
-Clone le repo et installe les dépendances :
+Clone the repository and install dependencies:
 
 ```bash
-git clone https://github.com/<ton_user>/<ton_repo>.git
-cd <ton_repo>
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+git clone https://github.com/JonasMouret/FaceSorter.git
+cd FaceSorter
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e .[dev]
 ````
 
+This installs the project in editable mode along with its development dependencies.
+
 ---
 
-## ▶️ Lancer l’application
+## ▶️ Running the Application
+
+### GUI
 
 ```bash
-python sort_photos_by_person.py
+facesorter-gui
+```
+
+### CLI
+
+```bash
+facesorter \
+  --people ./people \
+  --input ./input_photos \
+  --output ./output_photos \
+  --move \
+  --ctx -1      # -1 = CPU, 0 = first GPU if available
 ```
 
 ---
 
-## 🖼 Utilisation
+## ⚡ Quick Start (Demo)
 
-1. Lance l’app → configure les chemins `people/`, `input_photos/`, `output_photos/`.
-2. Ajoute des dossiers pour chaque personne dans `people/` (via l’interface ou drag & drop).
-3. Mets quelques photos de référence de chaque personne dans son dossier.
-4. Place tes photos brutes dans `input_photos/`.
-5. Clique sur **Démarrer** → les photos sont classées automatiquement dans `output_photos/<Nom>/`.
+Try FaceSorter quickly with dummy folders:
+
+```bash
+# Create demo folders
+mkdir -p people/Alice people/Bob input_photos output_photos
+
+# Put at least one reference photo of each person into their folder
+cp demo_photos/alice1.jpg people/Alice/
+cp demo_photos/bob1.jpg people/Bob/
+
+# Place some mixed photos into input_photos
+cp demo_photos/*.jpg input_photos/
+
+# Run FaceSorter (CLI)
+facesorter --people people --input input_photos --output output_photos --move
+
+# After processing:
+# - Matched photos are moved to output_photos/Alice or output_photos/Bob
+# - Unknowns go to output_photos/_Unknown
+# - Photos without faces go to output_photos/_NoFace
+```
+
+Or launch the GUI:
+
+```bash
+facesorter-gui
+```
+
+Select the `people/`, `input_photos/`, and `output_photos/` folders, then click **Start**.
 
 ---
 
-## 🔒 Mode hors-ligne
+## 🖼 Usage
 
-Les modèles InsightFace (`buffalo_l`) sont intégrés dans le dossier `insightface_home/models/buffalo_l`.
-Au runtime, le script force `INSIGHTFACE_HOME` vers ce dossier embarqué → aucun téléchargement n’est requis.
+1. Start the app → configure the paths for `people/`, `input_photos/`, `output_photos/`.
+2. Add folders for each person in `people/` (via the UI or drag & drop).
+3. Place a few **reference photos** of each person inside their folder.
+4. Drop your unsorted photos into `input_photos/`.
+5. Click **Start** → photos are automatically sorted into `output_photos/<Name>/`.
 
 ---
 
-## 🛠 Compilation avec PyInstaller
+## 🔒 Offline Mode
 
-### Linux / Windows (local)
+InsightFace models (`buffalo_l`) can be bundled inside `insightface_home/models/buffalo_l`.
+At runtime, the app forces `INSIGHTFACE_HOME` to this bundled folder → no downloads required.
+
+---
+
+## 🛠 Building with PyInstaller
+
+### Local (Linux / Windows)
 
 ```bash
 pip install pyinstaller
-pyinstaller FaceSorter.spec
+pyinstaller tools/FaceSorter.spec
 ```
 
-Résultat :
+Result:
 
 * **Linux** → `dist/FaceSorter/`
 * **Windows** → `dist/FaceSorter.exe`
 
 ### macOS (via GitHub Actions)
 
-Depuis Ubuntu, tu ne peux pas générer directement une app macOS.
-👉 Utilise un workflow **GitHub Actions** avec runner macOS.
+On Linux you cannot build `.app` bundles directly.
+👉 Use the provided GitHub Actions workflow (`.github/workflows/macos-build.yml`) which builds **FaceSorter.app** on macOS runners and publishes ZIP artifacts.
 
-Exemple : `.github/workflows/macos-build.yml` est fourni pour construire **FaceSorter.app** et publier un ZIP.
-
-Artifacts générés → `FaceSorter-macOS.zip` contenant l’app autonome.
+Artifacts → `FaceSorter-macOS-x86_64.zip` / `FaceSorter-macOS-arm64.zip`.
 
 ---
 
-## ⚠️ Notes importantes
+## ⚠️ Notes
 
-* Première ouverture macOS : clic droit → **Ouvrir** (app non signée).
-* Pour une distribution large, ajoute une étape de **signature et notarisation** Apple Developer.
-* Pour de très gros dossiers de photos, l’affichage des vignettes est limité (par défaut 500 images max affichées).
+* First run on macOS: right-click → **Open** (app is unsigned).
+* For public distribution, add an Apple Developer **signing and notarization** step.
+* For very large photo sets, thumbnail display is capped (default: 500 images max).
 
 ---
 
-## 📄 Licence
+## 📄 License
 
-Ce projet est sous licence [MIT](LICENSE).  
+This project is licensed under the [MIT License](LICENSE).
 © 2025 Jonas Mouret

@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "facesorter"
+version = "0.1.2"
+description = "Sort photos by person (InsightFace) – GUI & CLI"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "Jonas Mouret", email = "jonas@mouret.org" }]
+dependencies = [
+  "numpy",
+  "pillow",
+  "pillow-heif",
+  "opencv-python",
+  "insightface>=0.7.3",
+  "onnxruntime; platform_system != 'Darwin'",
+  "PySide6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "mypy", "pre-commit"]
+
+[project.scripts]
+facesorter = "facesorter.cli:main"
+facesorter-gui = "facesorter.gui.main_window:main"  # à créer: un petit wrapper qui lance QApplication
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.ruff]
+line-length = 100

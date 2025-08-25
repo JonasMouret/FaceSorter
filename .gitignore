@@ -1,6 +1,41 @@
-__pycache__/\ndist/\nbuild/\n*.spec\n.venv/\n
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.env
+.venv
+venv/
+ENV/
 
-/people
-/output_photos
-/.DS_Store
-/input_photos
+# --- IDE ---
+.vscode/
+.idea/
+
+# --- Tests & Coverage ---
+.coverage
+htmlcov/
+.pytest_cache/
+
+# --- Logs ---
+*.log
+
+# --- Local data ---
+input_photos/
+output_photos/
+people/
+insightface_home/
+
+# --- Packaging ---
+*.spec
+*.bak
+*.tmp
+
+# --- OS ---
+.DS_Store
+Thumbs.db
