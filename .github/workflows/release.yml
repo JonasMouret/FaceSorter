@@ -43,7 +43,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip wheel setuptools
           pip install .
-          pip install ${{ matrix.ort }} pyinstaller
+          pip install "numpy<2" ${{ matrix.ort }} pyinstaller
 
       - name: Download InsightFace models (buffalo_l)
         run: |
@@ -93,7 +93,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip wheel setuptools
           pip install .
-          pip install onnxruntime pyinstaller
+          pip install "numpy<2" onnxruntime pyinstaller
 
       - name: Download InsightFace models (buffalo_l)
         shell: pwsh
