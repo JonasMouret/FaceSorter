@@ -1093,12 +1093,31 @@ QToolTip {
 """
 
 
+def _app_icon() -> QIcon:
+    """Load the app icon from the resources package, compatible with PyInstaller."""
+    import os
+    import sys
+
+    candidates = []
+    if hasattr(sys, "_MEIPASS"):
+        # PyInstaller bundle
+        candidates.append(os.path.join(sys._MEIPASS, "facesorter", "resources", "icon.png"))
+    # Development / installed package
+    candidates.append(str(Path(__file__).parent.parent / "resources" / "icon.png"))
+
+    for p in candidates:
+        if os.path.exists(p):
+            return QIcon(p)
+    return QIcon()
+
+
 def main() -> None:
     """Entry point for `facesorter-gui` script."""
     import sys
     from PySide6.QtWidgets import QApplication
 
     app = QApplication(sys.argv)
+    app.setWindowIcon(_app_icon())
     app.setStyleSheet(_STYLESHEET)
     w = MainWindow()
     w.show()

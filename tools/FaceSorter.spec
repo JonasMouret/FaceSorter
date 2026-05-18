@@ -103,6 +103,11 @@ extra_datas = []
 if (ROOT / "insightface_home").is_dir():
     extra_datas.append((str(ROOT / "insightface_home"), "insightface_home"))
 
+# App icon (PNG embedded in the package, loaded at runtime by Qt)
+icon_png = SRC / "facesorter" / "resources" / "icon.png"
+if icon_png.exists():
+    extra_datas.append((str(icon_png), "facesorter/resources"))
+
 # ---------------------------------------------------------------------------
 # Hidden imports
 # ---------------------------------------------------------------------------
