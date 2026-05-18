@@ -1,8 +1,6 @@
 name: Build macOS app (Intel + ARM)
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
