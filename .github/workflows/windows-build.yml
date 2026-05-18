@@ -1,0 +1,61 @@
+name: Build Windows app
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install project + build tools
+        run: |
+          python -m pip install --upgrade pip wheel setuptools
+          pip install .
+          pip install onnxruntime pyinstaller
+
+      - name: Download InsightFace models (buffalo_l)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path insightface_home\models | Out-Null
+          Invoke-WebRequest `
+            -Uri "https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip" `
+            -OutFile buffalo_l.zip
+          Expand-Archive -Path buffalo_l.zip -DestinationPath insightface_home\models\ -Force
+
+      - name: Smoke test
+        run: |
+          python -c "import facesorter, sys; print('facesorter version:', getattr(facesorter, '__version__', 'n/a'))"
+          python -c "from facesorter.gui.main_window import main; print('GUI import OK')"
+
+      - name: Build with PyInstaller
+        run: pyinstaller --noconfirm --clean tools/FaceSorter.spec
+
+      - name: Verify exe exists
+        shell: pwsh
+        run: |
+          $exe = "dist\FaceSorter\FaceSorter.exe"
+          if (-not (Test-Path $exe)) { throw "FaceSorter.exe not found at $exe" }
+          Write-Host "Binary found: $exe"
+          Get-Item $exe | Select-Object Name, Length, LastWriteTime
+
+      - name: Package as zip
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path dist\FaceSorter `
+            -DestinationPath dist\FaceSorter-Windows-x86_64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FaceSorter-Windows-x86_64.zip
+          path: dist/FaceSorter-Windows-x86_64.zip

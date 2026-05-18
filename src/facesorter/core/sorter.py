@@ -110,13 +110,15 @@ class FaceSorterCore:
                         file_to_targets[img_path] = [self.cfg.unknown_dirname]
         return file_to_targets
 
-    def process_files(self, files: List[Path], log_cb=lambda s: None, progress_cb=None) -> int:
+    def process_files(self, files: List[Path], log_cb=lambda s: None, progress_cb=None):
+        """Returns (sorted_count, unknown_count, noface_count)."""
         ensure_dir(self.cfg.output_dir)
         ensure_dir(self.cfg.output_dir / self.cfg.unknown_dirname)
         ensure_dir(self.cfg.output_dir / self.cfg.noface_dirname)
 
         groups = group_by_time(files, self.cfg.group_window_sec)
-        moved = 0; total = len(files); processed = 0
+        sorted_n = unknown_n = noface_n = 0
+        total = len(files); processed = 0
         for group in groups:
             mapping = self.classify_group(group)
             for img_path, targets in mapping.items():
@@ -127,17 +129,22 @@ class FaceSorterCore:
                     try:
                         if self.cfg.move_instead_copy:
                             shutil.move(str(img_path), str(dest_path))
-                            log_cb(f"[MOVE] {img_path} -> {dest_path}")
+                            log_cb(f"[MOVE] {img_path.name} → {target}/")
                         else:
                             shutil.copy2(str(img_path), str(dest_path))
-                            log_cb(f"[COPY] {img_path} -> {dest_path}")
-                        moved += 1
+                            log_cb(f"[COPY] {img_path.name} → {target}/")
+                        if target == self.cfg.unknown_dirname:
+                            unknown_n += 1
+                        elif target == self.cfg.noface_dirname:
+                            noface_n += 1
+                        else:
+                            sorted_n += 1
                     except Exception as e:
-                        log_cb(f"[ERROR] {img_path} -> {dest_path}: {e}")
+                        log_cb(f"[ERREUR] {img_path.name} : {e}")
                 processed += 1
                 if progress_cb:
                     progress_cb(processed, total)
-        return moved
+        return sorted_n, unknown_n, noface_n
 
 def _unique_path(dest: Path) -> Path:
     if not dest.exists(): return dest

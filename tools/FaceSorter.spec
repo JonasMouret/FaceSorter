@@ -1,4 +1,4 @@
-# tools/FaceSorter.spec
+# tools/FaceSorter.spec — cross-platform (macOS + Windows)
 # -*- mode: python ; coding: utf-8 -*-
 
 import os
@@ -10,19 +10,23 @@ from PyInstaller.utils.hooks import (
     collect_submodules,
 )
 
+IS_MACOS   = sys.platform == "darwin"
+IS_WINDOWS = sys.platform == "win32"
+
 # When PyInstaller runs a spec, __file__ is not defined -> use CWD
-ROOT = Path.cwd()
-SRC = ROOT / "src"
+ROOT  = Path.cwd()
+SRC   = ROOT / "src"
 TOOLS = ROOT / "tools"
 
-# Make package importable to read version
 sys.path.insert(0, str(SRC))
 try:
     from facesorter import __version__ as FS_VERSION
 except Exception:
     FS_VERSION = "0.0.0"
 
-# --- PySide6: translations + plugins Qt ---
+# ---------------------------------------------------------------------------
+# PySide6: translations + Qt plugins
+# ---------------------------------------------------------------------------
 pyside_datas = collect_data_files(
     "PySide6",
     includes=[
@@ -33,7 +37,6 @@ pyside_datas = collect_data_files(
         "Qt/plugins/styles/*",
     ],
 )
-# Extra safety: collect from submodule PySide6.Qt (sometimes needed on CI)
 pyside_plugins = collect_data_files(
     "PySide6.Qt",
     includes=[
@@ -44,43 +47,65 @@ pyside_plugins = collect_data_files(
     ],
 )
 
-# --- onnxruntime (CPU or silicon): dynamic libs ---
+# ---------------------------------------------------------------------------
+# onnxruntime: dynamic libs (CPU on Windows/Linux, silicon on Apple M*)
+# ---------------------------------------------------------------------------
 onnx_bins = []
 try:
     onnx_bins = collect_dynamic_libs("onnxruntime")
 except Exception:
-    onnx_bins = []
+    pass
 
-# --- pillow-heif: optional data ---
+# ---------------------------------------------------------------------------
+# pillow-heif: data + DLLs (the wheel already includes libheif on Windows)
+# ---------------------------------------------------------------------------
 pillow_heif_datas = []
+pillow_heif_bins  = []
 try:
     pillow_heif_datas = collect_data_files("pillow_heif")
+    pillow_heif_bins  = collect_dynamic_libs("pillow_heif")
 except Exception:
-    pillow_heif_datas = []
+    pass
 
-# --- libheif via Homebrew (optional) ---
-brew_lib_candidates = ["/usr/local/lib", "/opt/homebrew/lib"]
-libheif_bins = []
-for libdir in brew_lib_candidates:
-    if os.path.isdir(libdir):
-        for fn in os.listdir(libdir):
-            if fn.startswith("libheif") and fn.endswith(".dylib"):
-                libheif_bins.append((os.path.join(libdir, fn), "."))
+# ---------------------------------------------------------------------------
+# macOS-only: libheif + libomp via Homebrew
+# ---------------------------------------------------------------------------
+libheif_bins  = []
+libomp_bins   = []
+runtime_hooks = []
 
-# --- libomp.dylib (Intel, optional) ---
-libomp_bins = []
-for libdir in ["/usr/local/lib", "/usr/local/opt/libomp/lib", "/opt/homebrew/opt/libomp/lib"]:
-    if os.path.isdir(libdir):
-        cand = os.path.join(libdir, "libomp.dylib")
-        if os.path.exists(cand):
-            libomp_bins.append((cand, "."))
+if IS_MACOS:
+    brew_lib_candidates = ["/usr/local/lib", "/opt/homebrew/lib"]
+    for libdir in brew_lib_candidates:
+        if os.path.isdir(libdir):
+            for fn in os.listdir(libdir):
+                if fn.startswith("libheif") and fn.endswith(".dylib"):
+                    libheif_bins.append((os.path.join(libdir, fn), "."))
 
-# --- InsightFace offline models ---
+    for libdir in [
+        "/usr/local/lib",
+        "/usr/local/opt/libomp/lib",
+        "/opt/homebrew/opt/libomp/lib",
+    ]:
+        if os.path.isdir(libdir):
+            cand = os.path.join(libdir, "libomp.dylib")
+            if os.path.exists(cand):
+                libomp_bins.append((cand, "."))
+
+    hook = TOOLS / "runtime_hook_dylib_path.py"
+    if hook.exists():
+        runtime_hooks = [str(hook)]
+
+# ---------------------------------------------------------------------------
+# InsightFace offline models bundled at build time
+# ---------------------------------------------------------------------------
 extra_datas = []
 if (ROOT / "insightface_home").is_dir():
     extra_datas.append((str(ROOT / "insightface_home"), "insightface_home"))
 
-# --- Hidden imports InsightFace / ONNX / scientific stack ---
+# ---------------------------------------------------------------------------
+# Hidden imports
+# ---------------------------------------------------------------------------
 hiddenimports = set()
 for mod in ("insightface", "onnx", "onnxruntime", "skimage", "scipy", "cv2"):
     try:
@@ -88,46 +113,81 @@ for mod in ("insightface", "onnx", "onnxruntime", "skimage", "scipy", "cv2"):
     except Exception:
         pass
 
-# --- Icon (optional) ---
-ICON_PATH = TOOLS / "icon.icns"
-ICON = str(ICON_PATH) if ICON_PATH.exists() else None
+# ---------------------------------------------------------------------------
+# Icons
+# ---------------------------------------------------------------------------
+ICON_ICNS = TOOLS / "icon.icns"
+ICON_ICO  = TOOLS / "icon.ico"
+if IS_MACOS:
+    ICON = str(ICON_ICNS) if ICON_ICNS.exists() else None
+elif IS_WINDOWS:
+    ICON = str(ICON_ICO) if ICON_ICO.exists() else None
+else:
+    ICON = None
 
+# ---------------------------------------------------------------------------
+# Analysis
+# ---------------------------------------------------------------------------
 a = Analysis(
-    # Entry point: GUI main window
     [str(SRC / "facesorter" / "gui" / "main_window.py")],
-    pathex=[str(SRC)],        # important for imports
-    binaries=onnx_bins + libheif_bins + libomp_bins,
+    pathex=[str(SRC)],
+    binaries=onnx_bins + libheif_bins + libomp_bins + pillow_heif_bins,
     datas=pyside_datas + pyside_plugins + pillow_heif_datas + extra_datas,
     hiddenimports=list(hiddenimports),
+    runtime_hooks=runtime_hooks,
     noarchive=False,
 )
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    name="FaceSorter",
-    console=False,            # GUI only
-    icon=ICON,
-)
+# ---------------------------------------------------------------------------
+# macOS: one-file exe → .app bundle
+# ---------------------------------------------------------------------------
+if IS_MACOS:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        name="FaceSorter",
+        console=False,
+        icon=ICON,
+    )
+    app = BUNDLE(
+        exe,
+        name="FaceSorter.app",
+        icon=ICON,
+        info_plist={
+            "NSHighResolutionCapable": True,
+            "CFBundleIdentifier": "org.hdj-advisor.facesorter",
+            "CFBundleName": "FaceSorter",
+            "CFBundleShortVersionString": FS_VERSION,
+            "LSApplicationCategoryType": "public.app-category.photography",
+            "NSPhotoLibraryUsageDescription": "FaceSorter needs access to your photos to organize them by person.",
+            "NSDocumentsFolderUsageDescription": "FaceSorter organizes photos in your folders.",
+        },
+        bundle_identifier="org.hdj-advisor.facesorter",
+    )
 
-app = BUNDLE(
-    exe,
-    name="FaceSorter.app",
-    icon=ICON,
-    info_plist={
-        "NSHighResolutionCapable": True,
-        "CFBundleIdentifier": "org.hdj-advisor.facesorter",
-        "CFBundleName": "FaceSorter",
-        "CFBundleShortVersionString": FS_VERSION,
-        "LSApplicationCategoryType": "public.app-category.photography",
-        "NSPhotoLibraryUsageDescription": "FaceSorter needs access to your photos to organize them by person.",
-        "NSDocumentsFolderUsageDescription": "FaceSorter organizes photos in your folders.",
-        # "NSAppSleepDisabled": True,  # uncomment if you want to disable App Nap
-    },
-    bundle_identifier="org.hdj-advisor.facesorter",
-)
+# ---------------------------------------------------------------------------
+# Windows / Linux: one-dir bundle → dist/FaceSorter/ folder + FaceSorter.exe
+# ---------------------------------------------------------------------------
+else:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name="FaceSorter",
+        console=False,
+        icon=ICON,
+        version_file=None,
+    )
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        name="FaceSorter",
+    )

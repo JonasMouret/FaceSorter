@@ -1,4 +1,5 @@
 from __future__ import annotations
+import contextlib
 import os, sys, logging
 from pathlib import Path
 import numpy as np
@@ -11,13 +12,11 @@ def _bundled_insightface_home() -> Path:
     return base / "insightface_home"
 
 def setup_models_path():
-    try:
+    with contextlib.suppress(Exception):
         home = _bundled_insightface_home()
         if home.exists():
             os.environ["INSIGHTFACE_HOME"] = str(home)
             log.info("Using bundled INSIGHTFACE_HOME=%s", home)
-    except Exception:
-        pass
 
 class InsightService:
     def __init__(self, ctx_id: int, det_size=(640, 640)):

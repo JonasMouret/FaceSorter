@@ -16,6 +16,7 @@ class SortWorker(QThread):
     progress_set_max = Signal(int)
     progress_set_value = Signal(int)
     progress_set_text = Signal(str)
+    stats_updated = Signal(int, int, int)  # sorted, unknown, noface
 
     def __init__(self, cfg: SorterConfig, parent=None):
         super().__init__(parent)
@@ -23,6 +24,9 @@ class SortWorker(QThread):
         self.core = FaceSorterCore(cfg)
         self._stop = threading.Event()
         self._people_sig: Optional[str] = None
+        self._total_sorted = 0
+        self._total_unknown = 0
+        self._total_noface = 0
 
     def stop(self): self._stop.set()
 
@@ -68,9 +72,14 @@ class SortWorker(QThread):
                     self.progress_set_max.emit(1); self.progress_set_value.emit(0); self.progress_set_text.emit("En veille")
 
                 def _progress_cb(i, n): self.progress_set_value.emit(i)
-                count = self.core.process_files(files_now, self.log_sig.emit, _progress_cb)
+                sorted_n, unknown_n, noface_n = self.core.process_files(files_now, self.log_sig.emit, _progress_cb)
 
-                if count == 0:
+                self._total_sorted += sorted_n
+                self._total_unknown += unknown_n
+                self._total_noface += noface_n
+                self.stats_updated.emit(self._total_sorted, self._total_unknown, self._total_noface)
+
+                if sorted_n + unknown_n + noface_n == 0:
                     self.progress_set_text.emit("En veille"); time.sleep(self.cfg.poll_seconds)
                 else:
                     self.progress_set_text.emit("Terminé")
