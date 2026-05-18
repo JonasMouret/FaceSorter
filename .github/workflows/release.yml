@@ -17,10 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-13        # Intel x86_64
-            ort: "onnxruntime"
-            zipname: "FaceSorter-macOS-x86_64.zip"
-          - runner: macos-14        # Apple Silicon arm64
+          - runner: macos-14        # Apple Silicon arm64 (runs via Rosetta 2 on Intel)
             ort: "onnxruntime-silicon"
             zipname: "FaceSorter-macOS-arm64.zip"
 
@@ -152,7 +149,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/FaceSorter-macOS-x86_64.zip/FaceSorter-macOS-x86_64.zip
             artifacts/FaceSorter-macOS-arm64.zip/FaceSorter-macOS-arm64.zip
             artifacts/FaceSorter-Windows-x86_64.zip/FaceSorter-Windows-x86_64.zip
           generate_release_notes: true

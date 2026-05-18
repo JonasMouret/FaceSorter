@@ -9,11 +9,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-13   # Intel x86_64
-            py: "3.11"
-            ort: "onnxruntime"
-            zipname: "FaceSorter-macOS-x86_64.zip"
-          - runner: macos-14   # Apple Silicon arm64
+          - runner: macos-14   # Apple Silicon arm64 (runs via Rosetta 2 on Intel)
             py: "3.11"
             ort: "onnxruntime-silicon"
             zipname: "FaceSorter-macOS-arm64.zip"

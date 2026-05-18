@@ -43,12 +43,11 @@ Pre-built binaries are attached to each [GitHub Release](https://github.com/Jona
 
 | Platform | File |
 |---|---|
-| macOS Intel (x86_64) | `FaceSorter-macOS-x86_64.zip` → drag `FaceSorter.app` to Applications |
-| macOS Apple Silicon (arm64) | `FaceSorter-macOS-arm64.zip` → drag `FaceSorter.app` to Applications |
+| macOS (Apple Silicon + Intel via Rosetta 2) | `FaceSorter-macOS-arm64.zip` → drag `FaceSorter.app` to Applications |
 | Windows 10/11 (x86_64) | `FaceSorter-Windows-x86_64.zip` → extract and run `FaceSorter.exe` |
 
 > **macOS first launch**: right-click → **Open** (the app is unsigned).  
-> For public distribution, add Apple Developer signing and notarization.
+> The ARM binary runs natively on Apple Silicon and automatically via Rosetta 2 on Intel Macs (macOS 11+).
 
 ---
 
