@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "facesorter"
-version = "0.1.2"
+version = "0.2.0"
 description = "Sort photos by person (InsightFace) – GUI & CLI"
 readme = "README.md"
 requires-python = ">=3.9"

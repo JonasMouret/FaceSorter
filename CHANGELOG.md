@@ -8,20 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [0.2.0] - 2026-05-18
+
 ### ✨ Added
-- Unit test placeholders for `io/` and `core/` modules.
-- GitHub Actions workflows for Windows and Linux build pipelines (planned).
-- Screenshot/GIF placeholders in the README for better presentation.
+- **Automatic clustering mode** ("Regroupement automatique" tab): point to any folder of photos and FaceSorter automatically groups people into `Sujet_001/`, `Sujet_002/` … folders — no reference photos required.
+- New `core/cluster.py`: union-find clustering on cosine similarity, no external dependency.
+- New `worker/cluster_worker.py`: dedicated QThread for the clustering pipeline with graceful stop support.
+- **Windows packaging**: `tools/FaceSorter.spec` is now cross-platform; produces a one-dir `.exe` bundle on Windows with HEIF DLLs collected automatically.
+- New GitHub Actions workflow `windows-build.yml` (manual trigger) for Windows builds.
+- New GitHub Actions workflow `release.yml`: push a `v*` tag → builds macOS Intel + ARM + Windows in parallel and publishes a GitHub Release with all three ZIPs attached.
+- **App icon**: `tools/icon.icns` (macOS), `tools/icon.ico` (Windows, multi-size 16→256 px), `src/facesorter/resources/icon.png` (256×256, displayed in the Qt window at runtime).
 
 ### 🔄 Changed
-- Improved GUI usability with icons and better layout (planned).
-- Enhanced performance when handling very large photo sets.
-
-### 🐛 Fixed
-- _Placeholder for upcoming bug fixes._
-
-### 🛡️ Security
-- _Placeholder for security-related changes._
+- `MainWindow` refactored into two tabs using `QTabWidget` — existing "Tri guidé" behaviour is fully preserved.
+- `macos-build.yml` and `windows-build.yml` now trigger on `workflow_dispatch` only (no longer on every push to `main`); production builds happen via `release.yml` on tags.
+- Upscale factors extended to `(1.5, 2.0, 3.0)` in automatic mode for better detection of small or distant faces.
+- Updated README: logo, CI badges, download table for all three platforms, usage guide with threshold tuning tips.
 
 ---
 
