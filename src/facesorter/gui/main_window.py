@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from PIL import Image
 from PIL.ImageQt import ImageQt
-from PySide6.QtCore import Qt, QSize, QSettings, QUrl, QThread, Signal, QObject
+from PySide6.QtCore import Qt, QSize, QSettings, QUrl, QThread, Signal, QObject, QTimer
 from PySide6.QtGui import QIcon, QPixmap, QDragEnterEvent, QDropEvent, QDesktopServices
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QVBoxLayout,
     QHBoxLayout,
+    QDialog,
+    QDialogButtonBox,
     QGridLayout,
     QListWidget,
     QListWidgetItem,
@@ -142,6 +144,7 @@ class MainWindow(QMainWindow):
         self._thumb_loader: Optional[_ThumbLoader] = None
         self.worker: Optional['SortWorker'] = None
         self.cluster_worker = None
+        self._update_installer = None
 
         tabs = QTabWidget()
         tabs.addTab(self._build_guided_tab(), "Tri guidé")
@@ -150,6 +153,8 @@ class MainWindow(QMainWindow):
 
         self.load_settings()
         self.refresh_people_list()
+
+        QTimer.singleShot(4000, self._start_update_check)
 
     # =========================================================
     # Tab 1 — Tri guidé (mode existant)
@@ -1021,10 +1026,104 @@ class MainWindow(QMainWindow):
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
 
+    # =========================================================
+    # Mise à jour automatique
+    # =========================================================
+    def _start_update_check(self):
+        from facesorter.worker.update_worker import UpdateChecker
+        self._update_checker = UpdateChecker(self)
+        self._update_checker.update_available.connect(self._on_update_available)
+        self._update_checker.start()
+
+    def _on_update_available(self, version: str, url: str):
+        from facesorter._version import __version__
+        dlg = _UpdateDialog(version, __version__, self)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        self._start_update_install(url, version)
+
+    def _start_update_install(self, url: str, version: str):
+        from facesorter.worker.update_worker import UpdateInstaller
+        dlg = _DownloadDialog(self)
+        self._update_installer = UpdateInstaller(url, version, self)
+        self._update_installer.progress.connect(dlg.set_progress)
+        self._update_installer.done.connect(lambda ok, msg: self._on_install_done(ok, msg, dlg))
+        self._update_installer.start()
+        dlg.exec()
+
+    def _on_install_done(self, success: bool, message: str, dlg: QDialog):
+        dlg.accept()
+        if success:
+            QMessageBox.information(
+                self,
+                "Mise à jour",
+                "La mise à jour a été téléchargée.\n"
+                "L'application va se fermer et redémarrer automatiquement.",
+            )
+            import sys
+            from PySide6.QtWidgets import QApplication
+            QApplication.quit()
+        else:
+            QMessageBox.warning(self, "Mise à jour", message)
+
     def closeEvent(self, event):
         self.stop_worker()
         self._stop_auto_cluster()
         event.accept()
+
+
+# =============================================================================
+# Dialogues de mise à jour
+# =============================================================================
+
+class _UpdateDialog(QDialog):
+    def __init__(self, new_version: str, current_version: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Mise à jour disponible")
+        self.setMinimumWidth(380)
+        v = QVBoxLayout(self)
+        v.setSpacing(12)
+
+        icon_lbl = QLabel("🔄")
+        icon_lbl.setStyleSheet("font-size: 32px;")
+        icon_lbl.setAlignment(Qt.AlignCenter)
+        v.addWidget(icon_lbl)
+
+        title = QLabel(f"<b>FaceSorter {new_version} est disponible</b>")
+        title.setAlignment(Qt.AlignCenter)
+        v.addWidget(title)
+
+        info = QLabel(
+            f"Vous utilisez la version {current_version}.\n"
+            "La mise à jour sera installée automatiquement\n"
+            "et l'application redémarrera."
+        )
+        info.setAlignment(Qt.AlignCenter)
+        info.setWordWrap(True)
+        v.addWidget(info)
+
+        btns = QDialogButtonBox()
+        self._ok = btns.addButton("Mettre à jour maintenant", QDialogButtonBox.AcceptRole)
+        self._skip = btns.addButton("Plus tard", QDialogButtonBox.RejectRole)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        v.addWidget(btns)
+
+
+class _DownloadDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Téléchargement en cours…")
+        self.setFixedWidth(320)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowCloseButtonHint)
+        v = QVBoxLayout(self)
+        v.addWidget(QLabel("Téléchargement de la mise à jour…"))
+        self._bar = QProgressBar()
+        self._bar.setRange(0, 100)
+        v.addWidget(self._bar)
+
+    def set_progress(self, value: int):
+        self._bar.setValue(value)
 
 
 _STYLESHEET = """
