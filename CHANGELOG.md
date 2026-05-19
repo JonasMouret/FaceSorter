@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.0] - 2026-05-19
+
+### 🐛 Fixed
+- **Doublons de sujets** : relancer l'analyse sur un dossier résultat déjà peuplé créait de nouveaux `Sujet_001`, `Sujet_002`… pouvant correspondre à des personnes différentes des dossiers existants. La numérotation repart désormais automatiquement après le dernier sujet présent.
+
+### ✨ Added
+- **Taille minimale de groupe** (`min_cluster_size`) : les groupes contenant moins de N photos vont dans `_Divers` plutôt que dans un dossier `Sujet_XXX` dédié — évite de créer un dossier par photo isolée.
+- **Checkbox "Effacer les dossiers résultat avant l'analyse"** : supprime les dossiers `Sujet_XXX`, `_SansVisage` et `_Divers` existants avant de démarrer, pour repartir d'un état propre.
+- **Bouton "⟳ Ré-analyser le résultat"** : relit toutes les photos déjà triées dans les dossiers `Sujet_XXX`, les regroupe à nouveau avec le seuil courant et réorganise les dossiers. Permet de fusionner des doublons ou corriger un mauvais regroupement sans retoucher les photos sources.
+- Tous les nouveaux paramètres sont sauvegardés/restaurés entre les sessions (`QSettings`).
+
+---
+
 ## [0.2.0] - 2026-05-18
 
 ### ✨ Added

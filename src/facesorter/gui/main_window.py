@@ -426,9 +426,23 @@ class MainWindow(QMainWindow):
             "Taille minimale (px) du plus petit côté d'un visage détectable.\n"
             "Réduire permet de détecter les visages petits ou éloignés."
         )
+        self.auto_mincluster_spin = QSpinBox()
+        self.auto_mincluster_spin.setRange(1, 50)
+        self.auto_mincluster_spin.setValue(1)
+        self.auto_mincluster_spin.setToolTip(
+            "Nombre minimum de photos pour former un sujet valide.\n"
+            "Les groupes plus petits sont déplacés dans '_Divers' au lieu d'un dossier Sujet_XXX.\n"
+            "Utile pour éviter de créer un dossier par photo isolée."
+        )
         self.auto_ctx_combo = QComboBox()
         self.auto_ctx_combo.addItems(["CPU", "GPU #0"])
         self.auto_ctx_combo.setToolTip("Processeur utilisé. GPU accélère fortement si disponible (CUDA).")
+        self.auto_clear_chk = QCheckBox("Effacer les dossiers résultat avant l'analyse")
+        self.auto_clear_chk.setToolTip(
+            "Supprime les dossiers Sujet_XXX, _SansVisage et _Divers existants avant de démarrer.\n"
+            "Recommandé pour éviter de créer des doublons de sujets.\n"
+            "Si décoché, la numérotation repart après le dernier sujet existant."
+        )
         self.auto_move_chk = QCheckBox("Déplacer les photos (au lieu de les copier)")
         self.auto_move_chk.setToolTip(
             "Déplacer supprime l'original. Copier conserve l'original — recommandé pour un premier essai."
@@ -437,15 +451,24 @@ class MainWindow(QMainWindow):
         g.addWidget(self.auto_threshold_spin, 0, 1)
         g.addWidget(QLabel("Taille min. visage (px) :"), 0, 2)
         g.addWidget(self.auto_minface_spin, 0, 3)
-        g.addWidget(QLabel("Processeur :"), 1, 0)
-        g.addWidget(self.auto_ctx_combo, 1, 1)
-        g.addWidget(self.auto_move_chk, 1, 2, 1, 2)
+        g.addWidget(QLabel("Taille min. groupe (photos) :"), 1, 0)
+        g.addWidget(self.auto_mincluster_spin, 1, 1)
+        g.addWidget(QLabel("Processeur :"), 1, 2)
+        g.addWidget(self.auto_ctx_combo, 1, 3)
+        g.addWidget(self.auto_clear_chk, 2, 0, 1, 4)
+        g.addWidget(self.auto_move_chk, 3, 0, 1, 4)
         v.addWidget(g_params)
 
         # Contrôles
         h_ctrl = QHBoxLayout()
         self.auto_open_input_btn = QPushButton("Ouvrir Source")
         self.auto_open_output_btn = QPushButton("Ouvrir Résultat")
+        self.auto_recluster_btn = QPushButton("⟳  Ré-analyser le résultat")
+        self.auto_recluster_btn.setToolTip(
+            "Relit toutes les photos déjà triées dans les dossiers Sujet_XXX\n"
+            "et les regroupe à nouveau avec le seuil actuel.\n"
+            "Utile pour fusionner des doublons ou corriger un mauvais regroupement."
+        )
         self.auto_start_btn = QPushButton("▶  Analyser et regrouper")
         self.auto_start_btn.setObjectName("startBtn")
         self.auto_stop_btn = QPushButton("■  Arrêter")
@@ -453,6 +476,7 @@ class MainWindow(QMainWindow):
         self.auto_stop_btn.setEnabled(False)
         h_ctrl.addWidget(self.auto_open_input_btn)
         h_ctrl.addWidget(self.auto_open_output_btn)
+        h_ctrl.addWidget(self.auto_recluster_btn)
         h_ctrl.addStretch(1)
         h_ctrl.addWidget(self.auto_start_btn)
         h_ctrl.addWidget(self.auto_stop_btn)
@@ -492,6 +516,7 @@ class MainWindow(QMainWindow):
         self.auto_open_input_btn.clicked.connect(lambda: self.open_dir(self.auto_input_edit.text()))
         self.auto_open_output_btn.clicked.connect(lambda: self.open_dir(self.auto_output_edit.text()))
         self.auto_start_btn.clicked.connect(self._start_auto_cluster)
+        self.auto_recluster_btn.clicked.connect(self._start_recluster)
         self.auto_stop_btn.clicked.connect(self._stop_auto_cluster)
 
         return w
@@ -511,31 +536,26 @@ class MainWindow(QMainWindow):
         self.auto_log.appendPlainText(text)
         self.auto_log.verticalScrollBar().setValue(self.auto_log.verticalScrollBar().maximum())
 
-    def _start_auto_cluster(self):
+    def _build_cluster_worker(self, recluster_mode: bool = False):
         from facesorter.worker.cluster_worker import ClusterWorker
 
-        input_dir = _to_local_path(self.auto_input_edit.text())
         output_text = self.auto_output_edit.text().strip()
-
-        if not self.auto_input_edit.text().strip() or not input_dir.exists() or not input_dir.is_dir():
-            QMessageBox.warning(self, "Dossier invalide", "Le dossier source est invalide ou vide.")
-            return
         if not output_text:
             QMessageBox.warning(self, "Dossier manquant", "Sélectionne un dossier résultat.")
-            return
+            return None
 
         output_dir = _to_local_path(output_text)
         threshold = self.auto_threshold_spin.value()
         min_face_size = self.auto_minface_spin.value()
+        min_cluster_size = self.auto_mincluster_spin.value()
         ctx_id = -1 if self.auto_ctx_combo.currentIndex() == 0 else 0
         move = self.auto_move_chk.isChecked()
+        clear_before = self.auto_clear_chk.isChecked()
 
-        self.auto_log.clear()
-        self.auto_append_log(f"[INFO] Source : {input_dir}")
-        self.auto_append_log(f"[INFO] Résultat : {output_dir}")
-        self.auto_append_log(f"[INFO] Seuil : {threshold:.2f}  |  Taille min. visage : {min_face_size}px")
+        # input_dir is irrelevant in recluster_mode (reads from output_dir/Sujet_XXX)
+        input_dir = _to_local_path(self.auto_input_edit.text() or str(output_dir))
 
-        self.cluster_worker = ClusterWorker(
+        worker = ClusterWorker(
             input_dir=input_dir,
             output_dir=output_dir,
             threshold=threshold,
@@ -543,15 +563,76 @@ class MainWindow(QMainWindow):
             upscale_factors=(1.5, 2.0, 3.0),
             ctx_id=ctx_id,
             move=move,
+            min_cluster_size=min_cluster_size,
+            clear_before_run=clear_before,
+            recluster_mode=recluster_mode,
         )
-        self.cluster_worker.log_sig.connect(self.auto_append_log)
-        self.cluster_worker.status.connect(lambda s: self.statusBar().showMessage(s))
-        self.cluster_worker.progress_max.connect(lambda n: self.auto_progress.setMaximum(max(1, n)))
-        self.cluster_worker.progress_val.connect(self.auto_progress.setValue)
-        self.cluster_worker.progress_txt.connect(self.auto_progress.setFormat)
-        self.cluster_worker.finished_sig.connect(self._on_cluster_finished)
-        self.cluster_worker.finished.connect(lambda: self._set_auto_running(False))
+        worker.log_sig.connect(self.auto_append_log)
+        worker.status.connect(lambda s: self.statusBar().showMessage(s))
+        worker.progress_max.connect(lambda n: self.auto_progress.setMaximum(max(1, n)))
+        worker.progress_val.connect(self.auto_progress.setValue)
+        worker.progress_txt.connect(self.auto_progress.setFormat)
+        worker.finished_sig.connect(self._on_cluster_finished)
+        worker.finished.connect(lambda: self._set_auto_running(False))
+        return worker
 
+    def _start_auto_cluster(self):
+        input_dir = _to_local_path(self.auto_input_edit.text())
+        if not self.auto_input_edit.text().strip() or not input_dir.exists() or not input_dir.is_dir():
+            QMessageBox.warning(self, "Dossier invalide", "Le dossier source est invalide ou vide.")
+            return
+
+        worker = self._build_cluster_worker(recluster_mode=False)
+        if worker is None:
+            return
+
+        threshold = self.auto_threshold_spin.value()
+        min_face_size = self.auto_minface_spin.value()
+        min_cluster_size = self.auto_mincluster_spin.value()
+
+        self.auto_log.clear()
+        self.auto_append_log(f"[INFO] Source : {input_dir}")
+        self.auto_append_log(f"[INFO] Résultat : {worker.output_dir}")
+        self.auto_append_log(
+            f"[INFO] Seuil : {threshold:.2f}  |  Visage min : {min_face_size}px  |  Groupe min : {min_cluster_size} photo(s)"
+        )
+
+        self.cluster_worker = worker
+        self._set_auto_running(True)
+        self.cluster_worker.start()
+
+    def _start_recluster(self):
+        output_text = self.auto_output_edit.text().strip()
+        if not output_text:
+            QMessageBox.warning(self, "Dossier manquant", "Sélectionne un dossier résultat à ré-analyser.")
+            return
+        output_dir = _to_local_path(output_text)
+        if not output_dir.exists():
+            QMessageBox.warning(self, "Dossier introuvable", f"Le dossier résultat n'existe pas :\n{output_dir}")
+            return
+
+        ret = QMessageBox.question(
+            self,
+            "Ré-analyser le résultat",
+            f"Les dossiers Sujet_XXX dans :\n{output_dir}\n\n"
+            "vont être relus, re-regroupés puis réorganisés avec le seuil actuel.\n"
+            "Les originaux seront déplacés (pas de perte de données).\n\n"
+            "Continuer ?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if ret != QMessageBox.Yes:
+            return
+
+        worker = self._build_cluster_worker(recluster_mode=True)
+        if worker is None:
+            return
+
+        self.auto_log.clear()
+        self.auto_append_log(f"[INFO] Ré-analyse de : {output_dir}")
+        self.auto_append_log(f"[INFO] Seuil : {self.auto_threshold_spin.value():.2f}  |  Groupe min : {self.auto_mincluster_spin.value()} photo(s)")
+
+        self.cluster_worker = worker
         self._set_auto_running(True)
         self.cluster_worker.start()
 
@@ -605,8 +686,10 @@ class MainWindow(QMainWindow):
             self.auto_output_edit.setText(str(_to_local_path(auto_output)))
         self.auto_threshold_spin.setValue(float(self.settings.value("auto_threshold", 0.50)))
         self.auto_minface_spin.setValue(int(self.settings.value("auto_min_face_size", 24)))
+        self.auto_mincluster_spin.setValue(int(self.settings.value("auto_min_cluster_size", 1)))
         auto_ctx = int(self.settings.value("auto_ctx_id", -1))
         self.auto_ctx_combo.setCurrentIndex(0 if auto_ctx == -1 else 1)
+        self.auto_clear_chk.setChecked(self.settings.value("auto_clear_before_run", "false") == "true")
         self.auto_move_chk.setChecked(self.settings.value("auto_move", "false") == "true")
 
     def save_settings(self):
@@ -628,8 +711,10 @@ class MainWindow(QMainWindow):
         self.settings.setValue("auto_output_dir", self.auto_output_edit.text())
         self.settings.setValue("auto_threshold", self.auto_threshold_spin.value())
         self.settings.setValue("auto_min_face_size", self.auto_minface_spin.value())
+        self.settings.setValue("auto_min_cluster_size", self.auto_mincluster_spin.value())
         auto_ctx_id = -1 if self.auto_ctx_combo.currentIndex() == 0 else 0
         self.settings.setValue("auto_ctx_id", auto_ctx_id)
+        self.settings.setValue("auto_clear_before_run", "true" if self.auto_clear_chk.isChecked() else "false")
         self.settings.setValue("auto_move", "true" if self.auto_move_chk.isChecked() else "false")
 
     def select_dir(self, edit: QLineEdit):
