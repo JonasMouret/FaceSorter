@@ -146,21 +146,27 @@ a = Analysis(
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
 # ---------------------------------------------------------------------------
-# macOS: one-file exe → .app bundle
+# macOS: one-dir bundle → .app (more stable than one-file with Gatekeeper)
 # ---------------------------------------------------------------------------
 if IS_MACOS:
     exe = EXE(
         pyz,
         a.scripts,
-        a.binaries,
-        a.zipfiles,
-        a.datas,
+        [],
+        exclude_binaries=True,
         name="FaceSorter",
         console=False,
         icon=ICON,
     )
-    app = BUNDLE(
+    coll = COLLECT(
         exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        name="FaceSorter",
+    )
+    app = BUNDLE(
+        coll,
         name="FaceSorter.app",
         icon=ICON,
         info_plist={
