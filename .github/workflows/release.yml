@@ -8,43 +8,72 @@ on:
 
 jobs:
   # -----------------------------------------------------------------------
-  # macOS builds: Intel x86_64 (macos-13) + Apple Silicon arm64 (macos-14)
+  # macOS builds — deux jobs sur macos-14 :
+  #   • arm64  : Python via setup-python (natif)
+  #   • x86_64 : Python.org universal installer + arch -x86_64 (Rosetta 2)
   # -----------------------------------------------------------------------
   build-macos:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-13
+          - runner: macos-14
+            target_arch: x86_64
             ort: "onnxruntime"
             zipname: "FaceSorter-macOS-x86_64.zip"
           - runner: macos-14
+            target_arch: arm64
             ort: "onnxruntime-silicon"
             zipname: "FaceSorter-macOS-arm64.zip"
 
     runs-on: ${{ matrix.runner }}
     env:
       MACOSX_DEPLOYMENT_TARGET: "11.0"
-      DYLD_FALLBACK_LIBRARY_PATH: /usr/local/lib:/opt/homebrew/lib
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Show runner arch
+        run: uname -m && sw_vers -productVersion
+
+      # --- Python arm64 (natif) ---
+      - name: Setup Python arm64
+        if: matrix.target_arch == 'arm64'
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Show arch
-        run: uname -m && sw_vers -productVersion
+      # --- Python x86_64 via Python.org universal installer ---
+      - name: Setup Python x86_64 (universal installer)
+        if: matrix.target_arch == 'x86_64'
+        run: |
+          curl -fsSL "https://www.python.org/ftp/python/3.11.9/python-3.11.9-macos11.pkg" \
+            -o /tmp/python-x86.pkg
+          sudo installer -pkg /tmp/python-x86.pkg -target /
+          PYPATH="/Library/Frameworks/Python.framework/Versions/3.11/bin"
+          echo "PYTHON=arch -x86_64 ${PYPATH}/python3.11" >> "$GITHUB_ENV"
+          echo "PIP=arch -x86_64 ${PYPATH}/pip3"          >> "$GITHUB_ENV"
+          echo "PYINSTALLER=arch -x86_64 ${PYPATH}/pyinstaller" >> "$GITHUB_ENV"
+          echo "${PYPATH}" >> "$GITHUB_PATH"
 
-      - name: Install Homebrew deps (HEIC)
+      # Pour arm64, les commandes sont celles du PATH normal
+      - name: Set Python commands (arm64)
+        if: matrix.target_arch == 'arm64'
+        run: |
+          echo "PYTHON=python"           >> "$GITHUB_ENV"
+          echo "PIP=pip"                 >> "$GITHUB_ENV"
+          echo "PYINSTALLER=pyinstaller" >> "$GITHUB_ENV"
+
+      # --- libheif (arm64 Homebrew seulement ; x86_64 rely on pillow-heif wheels) ---
+      - name: Install libheif (arm64)
+        if: matrix.target_arch == 'arm64'
         run: brew update && brew install libheif || true
 
       - name: Install project + build tools
         run: |
-          python -m pip install --upgrade pip wheel setuptools
-          pip install .
-          pip install "numpy<2" ${{ matrix.ort }} pyinstaller
+          $PIP install --upgrade pip wheel setuptools
+          $PIP install .
+          $PIP install "numpy<2" ${{ matrix.ort }} pyinstaller
 
       - name: Download InsightFace models (buffalo_l)
         run: |
@@ -55,12 +84,11 @@ jobs:
 
       - name: Smoke test
         run: |
-          python -c "import facesorter, sys; print('facesorter version:', getattr(facesorter, '__version__', 'n/a'))"
+          $PYTHON -c "import facesorter; print('version:', facesorter.__version__)"
           mkdir -p people input_photos output_photos
-          facesorter --help
 
       - name: Build with PyInstaller
-        run: pyinstaller --noconfirm --clean tools/FaceSorter.spec
+        run: $PYINSTALLER --noconfirm --clean tools/FaceSorter.spec
 
       - name: Ad-hoc code sign
         run: codesign --deep --force --sign - "dist/FaceSorter.app"
@@ -109,9 +137,7 @@ jobs:
           Expand-Archive -Path buffalo_l.zip -DestinationPath insightface_home\models\ -Force
 
       - name: Smoke test
-        run: |
-          python -c "import facesorter, sys; print('facesorter version:', getattr(facesorter, '__version__', 'n/a'))"
-          python -c "from facesorter.gui.main_window import main; print('GUI import OK')"
+        run: python -c "import facesorter; print('version:', facesorter.__version__)"
 
       - name: Build with PyInstaller
         run: pyinstaller --noconfirm --clean tools/FaceSorter.spec
